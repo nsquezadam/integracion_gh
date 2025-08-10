@@ -6,13 +6,10 @@ pipeline {
         maven 'maven-3.9'
     }
 
-    options {
-        timestamps()
-        buildDiscarder(logRotator(numToKeepStr: '10'))
-    }
+    options { timestamps() }
 
     stages {
-        stage('Checkout Código') {
+        stage('Checkout') {
             steps {
                 git branch: 'main',
                         url: 'https://github.com/nsquezadam/integracion_gh.git',
@@ -20,55 +17,31 @@ pipeline {
             }
         }
 
-        stage('Compilar y Analizar Código') {
+        stage('Build & Test') {
             steps {
-                bat 'mvn clean compile'
-                bat 'mvn spotbugs:check'
+                bat 'mvn -B -U clean test'
             }
         }
 
-        stage('Pruebas Unitarias') {
+        stage('Package') {
             steps {
-                bat 'mvn test'
-            }
-            post {
-                always {
-                    junit '**/target/surefire-reports/*.xml'
-                }
+                bat 'mvn -B -DskipTests package'
+                archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
             }
         }
 
-        stage('Empaquetar Artefacto') {
+        stage('Deploy & Run (local)') {
             steps {
-                bat 'mvn package'
-            }
-            post {
-                success {
-                    archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
-                }
-            }
-        }
-
-        stage('Deployment') {
-            steps {
-                echo 'Desplegando localmente'
-                // Copia el JAR generado
-                bat 'if not exist C:\\deploy\\mi-app mkdir C:\\deploy\\mi-app'
-                bat 'copy /Y target\\*.jar C:\\deploy\\mi-app\\'
-            }
-        }
-
-        stage('Iniciar aplicación') {
-            steps {
-                echo 'Iniciando aplicación en segundo plano'
-                bat 'start "" java -jar C:\\deploy\\mi-app\\integracion_gh-1.0-SNAPSHOT.jar'
+                bat '''
+          if not exist C:\\deploy\\mi-app mkdir C:\\deploy\\mi-app
+          copy /Y target\\*.jar C:\\deploy\\mi-app\\app.jar
+          start "" java -jar C:\\deploy\\mi-app\\app.jar
+        '''
             }
         }
     }
 
     post {
-        always {
-            echo "Pipeline finalizado con estado: ${currentBuild.currentResult}"
-        }
+        always { echo "Estado: ${currentBuild.currentResult}" }
     }
 }
